@@ -38,6 +38,8 @@ namespace randomizer{
         std::vector<size_t> banned_enemies;
         uint64_t seed;
         uint32_t enemy_shuffling;
+        bool shuffle_enemies;//permute existing enemies (preserves population) instead of randomizing
+        bool shuffle_global;//when shuffling: true=across the whole game, false=within each map
         BossBalance boss_balance;
         Multiboss multiboss;
         int  roaming_boss_chance;

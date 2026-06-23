@@ -1,0 +1,9 @@
+# Build artifacts
+*.o
+*.a
+ds2rando_cli
+# Runtime input/output (provided by the binary release / generated)
+/data/
+/Param/
+/cheatsheets/
+er_config.txt

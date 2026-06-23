@@ -497,10 +497,11 @@ bool load_enemy_table(EnemyTable& enemy_table,GameData& map_data){
     while(std::getline(enemy_prop_file,line)){
         if(line.empty())continue;
         if(line.substr(0,2)=="//")continue;
-        auto columns = parse::split(line,',');
+        auto columns = parse::split(line,';');//data is ;-delimited: id;name;diff;size
+        if(columns.size()<4) continue;
         EnemyType enemy_type;
         parse::read_var(columns[0],enemy_type.id);
-        enemy_type.name=columns[1];
+        enemy_type.name=parse::trim(columns[1]);
         parse::read_var(columns[2],enemy_type.diff);
         parse::read_var(columns[3],enemy_type.size);
         enemy_id_to_index[enemy_type.id]=enemy_table.enemies.size();
@@ -517,8 +518,8 @@ bool load_enemy_table(EnemyTable& enemy_table,GameData& map_data){
         if(line.empty())continue;
         if(line.substr(0,2)=="//")continue;
         EnemyVariation variation;
-        variation.id = std::stoi(line.substr(0,line.find(' ')));
-        variation.name = line.substr(line.find(' ')+1);
+        variation.id = std::stoi(line);//leading number is the id
+        variation.name = parse::trim(line.substr(line.rfind(';')+1));//name is the last ;-field
         s32 enemy_id = variation.id/100;
         auto index = enemy_id_to_index[enemy_id];
         if(index==SIZE_MAX){
@@ -556,13 +557,14 @@ bool load_enemy_table(EnemyTable& enemy_table,GameData& map_data){
     while(std::getline(boss_prop_file,line)){
         if(line.empty())continue;
         if(line.substr(0,2)=="//")continue;
-        auto columns = parse::split(line,',');
+        auto columns = parse::split(line,';');//data is ;-delimited: id;diff;size;souls;name
+        if(columns.size()<5) continue;
         EnemyType enemy_type;
         parse::read_var(columns[0],enemy_type.id);
-        enemy_type.name=columns[1];
-        parse::read_var(columns[2],enemy_type.diff);
-        parse::read_var(columns[3],enemy_type.size);
-        parse::read_var(columns[4],enemy_type.souls_held);
+        parse::read_var(columns[1],enemy_type.diff);
+        parse::read_var(columns[2],enemy_type.size);
+        parse::read_var(columns[3],enemy_type.souls_held);
+        enemy_type.name=parse::trim(columns[4]);
         enemy_id_to_index[enemy_type.id]=enemy_table.bosses.size();
         enemy_table.bosses.push_back(std::move(enemy_type));
     }
@@ -577,8 +579,8 @@ bool load_enemy_table(EnemyTable& enemy_table,GameData& map_data){
         if(line.empty())continue;
         if(line.substr(0,2)=="//")continue;
         EnemyVariation variation;
-        variation.id = std::stoi(line.substr(0,line.find(' ')));
-        variation.name = line.substr(line.find(' ')+1);
+        variation.id = std::stoi(line);//leading number is the id
+        variation.name = parse::trim(line.substr(line.rfind(';')+1));//name is the last ;-field
         s32 enemy_id = variation.id/100;
         auto index = enemy_id_to_index[enemy_id];
         if(index==SIZE_MAX){
@@ -650,25 +652,22 @@ bool load_enemy_table(EnemyTable& enemy_table,GameData& map_data){
     while(std::getline(arena_file,line)){
         if(line.empty())continue;
         if(line.substr(0,2)=="//")continue;
-        auto columns = parse::split(line,',');
-        if(columns.size()!=7){
+        //data is ;-delimited: arena_id;boss#;map_id;gen_id;size;hp;dmg;def;wormhole_id;elana_spawn_id;loc_s;loc_e;name
+        auto columns = parse::split(line,';');
+        if(columns.size()<13){
             std::cout<<"Failed to parse line:"<<line<<" from:"<<boss_arena_path<<"\n";
-            return false;
+            continue;
         }
         BossArena arena;
-        parse::read_var(columns[0],arena.map_id);
-        columns[1].remove_prefix(1);//Remove the brackets
-        columns[1].remove_suffix(1);
-        auto ids = parse::split(columns[1],';');
-        for(size_t i = 0;i<ids.size();i++){
-            arena.ids.push_back((u64)-1);
-            parse::read_var(ids[i],arena.ids.back());
-        }
-        arena.name=columns[2];
-        parse::read_var(columns[3],arena.size);
-        parse::read_var(columns[4],arena.hp_target);
-        parse::read_var(columns[5],arena.dmg_target);
-        parse::read_var(columns[6],arena.def_target);
+        parse::read_var(columns[2],arena.map_id);
+        //New format has one generator id per row; multi-boss arenas span several rows
+        arena.ids.push_back((u64)-1);
+        parse::read_var(columns[3],arena.ids.back());
+        arena.name=parse::trim(columns[12]);
+        parse::read_var(columns[4],arena.size);
+        parse::read_var(columns[5],arena.hp_target);
+        parse::read_var(columns[6],arena.dmg_target);
+        parse::read_var(columns[7],arena.def_target);
         enemy_table.boss_arenas.push_back(std::move(arena));
     }
     arena_file.close();
@@ -681,29 +680,19 @@ bool load_enemy_table(EnemyTable& enemy_table,GameData& map_data){
     while(std::getline(reposition_file,line)){
         if(line.empty())continue;
         if(line.substr(0,2)=="//")continue;
-        auto tokens = parse::split(line,',');
-        if(tokens.size()!=3){
+        //data is ;-delimited: map_id;gen_id;x;y;z
+        auto tokens = parse::split(line,';');
+        if(tokens.size()<5){
             std::cout<<"Bad row in reposition file: Wrong number of tokens. "<<line<<'\n';
-            continue;
-        }
-        if(tokens[2].front()!='('||tokens[2].back()!=')'){
-            std::cout<<"Bad row in reposition file: "<<line<<'\n';
-            continue;
-        }
-        tokens[2].remove_prefix(1);
-        tokens[2].remove_suffix(1);
-        auto p = parse::split(tokens[2],';');
-        if(p.size()!=3){
-            std::cout<<"Bad row in reposition file: Wrong number of positions"<<line<<'\n';
             continue;
         }
         EnemyRepositioning repo;
         u64 map_id=0;
         parse::read_var(tokens[0],map_id);
         parse::read_var(tokens[1],repo.enemy_row);
-        parse::read_var(p[0],repo.position[0]);           
-        parse::read_var(p[1],repo.position[1]);           
-        parse::read_var(p[2],repo.position[2]);
+        parse::read_var(tokens[2],repo.position[0]);
+        parse::read_var(tokens[3],repo.position[1]);
+        parse::read_var(tokens[4],repo.position[2]);
         enemy_table.reposition.insert(std::make_pair(map_id,repo));
     }
     reposition_file.close();
@@ -946,11 +935,67 @@ bool randomize_enemies(GameData& map_data,EnemyTable& enemy_table,const Config& 
         can_bosses_spawn=false;
 
     }
-    if(allowed_enemies_index.empty()&&!boss_only){
+    if(allowed_enemies_index.empty()&&!boss_only&&!config.shuffle_enemies){
         std::cout<<"WARNING: All enemies are banned, randomization not performed\n";
         return false;
     }
+
+    //SHUFFLE MODE: instead of drawing random enemies, take the enemies that are
+    //already placed and redistribute them via a permutation, so the multiset of
+    //enemies in the game is preserved (every enemy still appears the same number
+    //of times, just in different spots). collect_original() grabs the concrete
+    //EnemyInstance (register + ai) currently at a slot; helper below builds the
+    //shuffled slot->instance assignment.
+    auto collect_original=[&](MapData& m,size_t j,EnemyInstance& out)->bool{
+        const auto& gen_data=m.generator.data[j];
+        const Register* r=find_regist_ptr(m,gen_data.generator_regist_param);
+        if(!r) return false;
+        out.ai_think=gen_data.ai_think_id;
+        out.regist=*r;
+        return true;
+    };
+    //Keyed by (map_index,slot_index). Populated globally here when shuffling the
+    //whole game; populated per-map inside the loop when shuffling each map alone.
+    std::map<std::pair<size_t,size_t>,EnemyInstance> shuffle_assignment;
+    if(config.shuffle_enemies&&config.shuffle_global){
+        std::vector<std::pair<size_t,size_t>> refs;
+        std::vector<EnemyInstance> pool;
+        for(size_t mi=0;mi<map_data.size();mi++){
+            auto& map=map_data[mi];
+            MapSetting settings=get_settings(map.id,config);
+            if(!settings.randomize||settings.enemy_limit==0) continue;
+            for(size_t j=0;j<map.generator.row_info.size();j++){
+                auto et=map.entity_info[map.generator.row_info[j].row].type;
+                if(!should_enemy_be_randomize(et,config)) continue;
+                EnemyInstance inst;
+                if(!collect_original(map,j,inst)) continue;
+                refs.push_back({mi,j});
+                pool.push_back(std::move(inst));
+            }
+        }
+        std::mt19937_64 shuffle_gen(config.seed);
+        std::shuffle(pool.begin(),pool.end(),shuffle_gen);
+        for(size_t k=0;k<refs.size();k++) shuffle_assignment[refs[k]]=pool[k];
+        std::cout<<"Global enemy shuffle: "<<pool.size()<<" enemies redistributed across the game\n";
+    }
+
+    //Population report: tally the original enemies at replaceable slots so we can
+    //confirm a shuffle keeps the multiset intact (and show how randomize changes it).
+    std::map<s32,int> orig_hist,placed_hist;
+    for(size_t mi2=0;mi2<map_data.size();mi2++){
+        auto& m=map_data[mi2];
+        MapSetting s=get_settings(m.id,config);
+        if(!s.randomize||s.enemy_limit==0) continue;
+        for(size_t j=0;j<m.generator.row_info.size();j++){
+            auto et=m.entity_info[m.generator.row_info[j].row].type;
+            if(!should_enemy_be_randomize(et,config)) continue;
+            EnemyInstance inst;
+            if(collect_original(m,j,inst)) orig_hist[inst.regist.enemy_id]++;
+        }
+    }
+
     for(auto& map:map_data){
+        size_t mi = static_cast<size_t>(&map - map_data.data());
         MapSetting settings = get_settings(map.id,config);
         if(!settings.randomize)continue;
         if(settings.enemy_limit==0) continue;
@@ -982,14 +1027,45 @@ bool randomize_enemies(GameData& map_data,EnemyTable& enemy_table,const Config& 
             std::cout<<"WARNING: Can't replace anything in: "<<map.name<<", skipping\n";
             continue;
         }
+        if(config.shuffle_enemies){
+            //Assign each replaceable slot one of the shuffled original enemies.
+            //Global shuffle was precomputed above; per-map shuffle is built here
+            //(seeded per map so each area is independent).
+            const std::map<std::pair<size_t,size_t>,EnemyInstance>* assign=&shuffle_assignment;
+            std::map<std::pair<size_t,size_t>,EnemyInstance> local_assignment;
+            if(!config.shuffle_global){
+                std::vector<size_t> slot_js;
+                std::vector<EnemyInstance> pool;
+                for(size_t j=0;j<enemy_slots.size();j++){
+                    if(!enemy_slots[j].replace) continue;
+                    EnemyInstance inst;
+                    if(!collect_original(map,j,inst)) continue;
+                    slot_js.push_back(j);
+                    pool.push_back(std::move(inst));
+                }
+                std::mt19937_64 shuffle_gen(config.seed+hash_str_uint32(map.name));
+                std::shuffle(pool.begin(),pool.end(),shuffle_gen);
+                for(size_t k=0;k<slot_js.size();k++) local_assignment[{mi,slot_js[k]}]=pool[k];
+                assign=&local_assignment;
+            }
+            for(size_t j=0;j<enemy_slots.size();j++){
+                auto& slot=enemy_slots[j];
+                if(!slot.replace) continue;
+                auto it=assign->find({mi,j});
+                if(it==assign->end()){ slot.replace=false; continue; }//no original enemy to move here
+                slot.enemy=it->second;
+                slot.boss=false;
+                slot.index=0;
+            }
+        }else{
         //Precalculate some variables and create the necessary bosses
         size_t different_enemies = 0;
         std::vector<s32> new_bosses_ids(settings.enemy_limit,0);
         if(boss_only){
-            boss_index = random::choose_n_elements(allowed_bosses_index,settings.enemy_limit,false,boss_chance_generator);
+            boss_index = rng::choose_n_elements(allowed_bosses_index,settings.enemy_limit,false,boss_chance_generator);
             for(auto& entry:enemy_slots){
                 if(!entry.replace)continue;
-                size_t random_index = random::vindex(boss_index,boss_chance_generator);
+                size_t random_index = rng::vindex(boss_index,boss_chance_generator);
                 if(new_bosses_ids[random_index]==0){
                     s32 new_boss_id = create_new_boss(enemy_table,boss_index[random_index],1.f,1.f,1.f,1.f);
                     if(new_boss_id==0) return false;
@@ -1001,13 +1077,13 @@ bool randomize_enemies(GameData& map_data,EnemyTable& enemy_table,const Config& 
             }
         }else if (can_bosses_spawn_zone){
             size_t different_bosses = (size_t)std::ceilf((float)settings.enemy_limit*((float)config.roaming_boss_chance/100.f));
-            boss_index = random::choose_n_elements(allowed_bosses_index,different_bosses,false,boss_chance_generator);
+            boss_index = rng::choose_n_elements(allowed_bosses_index,different_bosses,false,boss_chance_generator);
             //Theres a chance that even if n bosses are used the rolls can spawn less
             size_t different_used_bosses = 0;
             for(auto& entry:enemy_slots){
-                bool good_luck = random::roll(config.roaming_boss_chance,100,boss_chance_generator);
+                bool good_luck = rng::roll(config.roaming_boss_chance,100,boss_chance_generator);
                 if(!entry.replace||!good_luck)continue;
-                size_t random_index = random::vindex(boss_index,boss_chance_generator);
+                size_t random_index = rng::vindex(boss_index,boss_chance_generator);
                 if(new_bosses_ids[random_index]==0){
                     s32 new_boss_id = create_new_boss(enemy_table,boss_index[random_index],1.f,1.f,1.f,1.f);
                     if(new_boss_id==0) return false;
@@ -1030,7 +1106,7 @@ bool randomize_enemies(GameData& map_data,EnemyTable& enemy_table,const Config& 
         //Need to salt the seed for each different map to keep each map independent
         //Dont know if this is an ok way to it
         random_generator.seed(config.seed+hash_str_uint32(map.name));
-        std::vector<size_t> enemies_id = random::choose_n_elements(allowed_enemies_index,different_enemies,false,random_generator);
+        std::vector<size_t> enemies_id = rng::choose_n_elements(allowed_enemies_index,different_enemies,false,random_generator);
         if(!enemies_id.empty()){
             bool single_deck = config.enemy_shuffling==0;
             bool fit_deck    = config.enemy_shuffling==1;
@@ -1054,7 +1130,7 @@ bool randomize_enemies(GameData& map_data,EnemyTable& enemy_table,const Config& 
                 }
                 enemy_deck.resize(replace_count);
                 for(auto& card:enemy_deck){
-                    card = random::element(enemies_id,deck_shuffler);
+                    card = rng::element(enemies_id,deck_shuffler);
                 }
             }
             //Use the deck to select enemies
@@ -1081,13 +1157,18 @@ bool randomize_enemies(GameData& map_data,EnemyTable& enemy_table,const Config& 
             if(slot.boss){
                 const auto& boss_variation = enemy_table.bosses[slot.index].variations.front();
                 random_generator.discard(1);//Make it so replacing the enemy for a boss doesn't change the generator state
-                slot.enemy = random::element(boss_variation.instances,random_generator);
+                slot.enemy = rng::element(boss_variation.instances,random_generator);
                 slot.enemy.regist.enemy_id=slot.boss_id;//Replace by the created boss
             }else{
                 const auto& variations = enemy_table.enemies[slot.index].variations;
-                const auto& instances  = random::element(variations,random_generator).instances;
-                slot.enemy = random::element(instances,random_generator);
+                const auto& instances  = rng::element(variations,random_generator).instances;
+                slot.enemy = rng::element(instances,random_generator);
             }
+        }
+        }//end shuffle/randomize selection
+        //Tally what actually got placed (before scaling rewrites enemy ids)
+        for(auto& slot:enemy_slots){
+            if(slot.replace&&!slot.boss) placed_hist[slot.enemy.regist.enemy_id]++;
         }
         //Scaling
         if(config.enemy_scaling&&map.enemy_scaling<2000){//Only scale certain zones
@@ -1155,6 +1236,20 @@ bool randomize_enemies(GameData& map_data,EnemyTable& enemy_table,const Config& 
             regist_start_row+=1;
         }
     }
+
+    //--- Enemy population report ---
+    size_t total_placed=0;
+    for(const auto& kv:placed_hist) total_placed+=kv.second;
+    std::cout<<"--- Enemy population report ---\n";
+    std::cout<<(config.shuffle_enemies?"[shuffle] ":"[randomize] ")
+             <<"placed enemies: "<<total_placed
+             <<" | distinct enemy types  original: "<<orig_hist.size()
+             <<"  result: "<<placed_hist.size()<<"\n";
+    if(config.shuffle_enemies){
+        std::cout<<"Population identical to the original (every enemy appears the same number of times): "
+                 <<((orig_hist==placed_hist)?"YES":"NO")<<"\n";
+    }
+
     return true;
 }
 
@@ -1182,7 +1277,7 @@ void npc_cloning(GameData& map_data,EnemyTable& enemy_table,const Config& config
     u64 regist_start_row = 1100000000u;
     std::mt19937_64 random_generator;
     random_generator.seed(config.seed);
-    auto npc_index = random::vindex(enemy_table.npcs,random_generator);
+    auto npc_index = rng::vindex(enemy_table.npcs,random_generator);
     for(auto& map:map_data){
         auto& generator = map.generator;
         //Change all NCPS to use the same model
@@ -1312,12 +1407,12 @@ BossHolder generate_boss_deck(EnemyTable& enemy_table,const Config& config,std::
         }else{
             bool multiboss = enable_multiboss(arena,config);
             replacement.skip=false;
-            replacement.boss_table_index = random::element(*deck,random_generator);
+            replacement.boss_table_index = rng::element(*deck,random_generator);
             for(size_t i = 0;i<arena.ids.size();i++){
                 replacement.arena_boss_index = i;
                 holder.rando_data.push_back(replacement);
                 if(multiboss&&((i+1)<arena.ids.size())){
-                    replacement.boss_table_index = random::element(*deck,random_generator);
+                    replacement.boss_table_index = rng::element(*deck,random_generator);
                 }else{
                     random_generator.discard(1);
                 }
@@ -1332,10 +1427,10 @@ std::vector<u64> get_random_boss_ids(const BossArena& arena,EnemyTable& enemy_ta
     size_t boss_count=arena.ids.size();
     std::vector<EnemyType>& bosses=enemy_table.bosses;
     while(replacement_ids.size()<boss_count){
-        size_t boss_index = random::vindex(bosses,random_generator);
+        size_t boss_index = rng::vindex(bosses,random_generator);
         size_t tries = 0;
         while(bosses[boss_index].size>arena.size){//Put bosses where they fit
-            boss_index = random::vindex(bosses,random_generator);
+            boss_index = rng::vindex(bosses,random_generator);
             if((tries++)>10000)break;//Give up
         }
         if(multiboss){
@@ -1389,7 +1484,7 @@ void randomize_bosses(GameData& map_data,EnemyTable& enemy_table,const Config& c
 
         log<<row<<" REPLACEMENT:"<<boss.id<<" "<<boss.name<<'\n';
         const auto& variation = boss.variations.front();
-        auto random_enemy = random::element(variation.instances,random_generator);
+        auto random_enemy = rng::element(variation.instances,random_generator);
         if(arena.name=="Twin Dragonrider"&&twins&&row==864){ //864 is the bow guy
             auto ep = find_enemy_param(enemy_table.enemy_params,random_enemy.regist.enemy_id);
             // std::cout<<ep.ng_hp<<" "<<ep.behavior_id<<" "<<ep.id<<" "<<ep.dmg_mult<<"\n";
@@ -1670,6 +1765,8 @@ std::string generate_config_file(Config& config){
     ss<<"#SUM_REMOVE " <<config.remove_summons<<"\n";
     ss<<"#NPC_CLONING "<<config.replace_npcs<<"\n";
     ss<<"#SHUFFLE_TYPE "<<config.enemy_shuffling<<'\n';
+    ss<<"#SHUFFLE_ENEMIES "<<config.shuffle_enemies<<'\n';
+    ss<<"#SHUFFLE_GLOBAL "<<config.shuffle_global<<'\n';
     ss<<"#CHEATSHEET "<<config.write_cheatsheet<<'\n';
 
     ss<<"#ENEMY_RANDO "<<config.randomize_enemies<<"\n";
@@ -1736,6 +1833,8 @@ bool read_configfile(Config& config){
     config.randomize_lizards=true;
     config.remove_invis=false;
     config.enemy_shuffling=1;
+    config.shuffle_enemies=false;
+    config.shuffle_global=true;
     config.randomize_bosses=true;
     
 
@@ -1770,7 +1869,7 @@ bool read_configfile(Config& config){
     config.remove_summons=true;
     config.replace_npcs=true;
     config.write_cheatsheet=true;
-    config.seed=random::integer<u64>(0u,999999999999999u,random::m_gen);
+    config.seed=rng::integer<u64>(0u,999999999999999u,rng::m_gen);
     config.banned_enemies = {2130,2131,2261,6000};
     for(const auto& entry:common::map_names){
         MapSetting s;
@@ -1828,6 +1927,8 @@ bool read_configfile(Config& config){
         else if(command=="#ENEMY_MIMIC" )config.randomize_mimics=value1;
         else if(command=="#ENEMY_LIZARD")config.randomize_lizards=value1;
         else if(command=="#INVIS_ENEMY")config.remove_invis=value1;
+        else if(command=="#SHUFFLE_ENEMIES")config.shuffle_enemies=value1;
+        else if(command=="#SHUFFLE_GLOBAL")config.shuffle_global=value1;
         else if(command=="#ROAMING_BOSS")config.roaming_boss=value1;
         else if(command=="#ROAMING_CHANCE")config.roaming_boss_chance=(int)value1;
         else if(command=="#ROAMING_RESPAWN")config.respawn_roaming_boss=value1;

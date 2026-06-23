@@ -141,7 +141,7 @@ namespace solver{
             if(valid_nodes.size()==0){
                 std::cout<<"Can't place, no valid nodes\n";
             }else{
-                auto random_node = random::element(valid_nodes,generator);
+                auto random_node = rng::element(valid_nodes,generator);
                 // for(const auto& possible_node:valid_nodes){
                 //     std::cout<<possible_node<<",";
                 // }
@@ -1092,7 +1092,7 @@ void write_config_file(ItemRandoConfig& config){
     }
 }
 void read_config_file(ItemRandoConfig& config){
-    config.seed=random::integer<u64>(0u,999999999999999u,random::m_gen);
+    config.seed=rng::integer<u64>(0u,999999999999999u,rng::m_gen);
     config.weight_limit=70u;
     config.unlock_common_shop=false;
     config.unlock_straid_trades=true;
@@ -1367,10 +1367,10 @@ bool place_graph_key_items(ItemRandoData& lots,ItemRandoConfig& config){
         s32 lot_id = 0;
         size_t placing_node = 0;
         while(true){
-            placing_node = random::element(valid_nodes,generator);
+            placing_node = rng::element(valid_nodes,generator);
             auto& room_lots = lots.location_lots[graph.rooms[placing_node].name];
             if(!room_lots.empty()){
-                lot_id = random::element(room_lots,generator);
+                lot_id = rng::element(room_lots,generator);
                 if(!vector_find_swap_pop(room_lots,lot_id)){
                     std::cout<<"Waht?\n";
                 }
@@ -1418,7 +1418,7 @@ bool place_rest_keys(ItemRandoData& lots,ItemRandoConfig& config){
                 std::cout<<"No more unmissable lots to place keys\n";
                 return false;
             }
-            auto lot_id = random::element(lots.unmissable_lots,generator);
+            auto lot_id = rng::element(lots.unmissable_lots,generator);
             LotData ld;
             ld.amount  =1u;
             ld.chance  =100.f;
@@ -1452,7 +1452,7 @@ void place_shop_items(ItemRandoData& lots,ItemRandoConfig& config){
         element->quantity-=1;
         a.quantity=255u;
         a.infinite=true;
-        a.price_mult=random::real(0.5f,1.5f,generator);
+        a.price_mult=rng::real(0.5f,1.5f,generator);
         wars.pop_back();
     }    
     for(auto& a:shops.ornifex_trades){
@@ -1462,7 +1462,7 @@ void place_shop_items(ItemRandoData& lots,ItemRandoConfig& config){
         element->quantity-=1;
         a.quantity=255u;
         a.infinite=true;
-        a.price_mult=random::real(0.5f,1.5f,generator);
+        a.price_mult=rng::real(0.5f,1.5f,generator);
         wars.pop_back();
     }
     size_t original_size=shops.ornifex_trades.size();
@@ -1487,7 +1487,7 @@ void place_shop_items(ItemRandoData& lots,ItemRandoConfig& config){
             slot.infinite=true;
             slot.quantity=255;
             slot.item_id=item;
-            slot.price_mult = random::real(0.5f,1.5f,generator);
+            slot.price_mult = rng::real(0.5f,1.5f,generator);
         }
     }
 
@@ -1503,7 +1503,7 @@ void place_shop_items(ItemRandoData& lots,ItemRandoConfig& config){
         element->quantity-=1;  
         slot.infinite=false;
         slot.quantity=1;
-        slot.price_mult = random::real(0.5f,1.5f,generator);
+        slot.price_mult = rng::real(0.5f,1.5f,generator);
     }
     struct ShopConsumable{s32 id;s32 min,max;float price_min,price_max;};
     std::vector<ShopConsumable> consumables{
@@ -1546,10 +1546,10 @@ void place_shop_items(ItemRandoData& lots,ItemRandoConfig& config){
 
     for(auto index:shop_index){
         auto& slot = shops.common[index];
-        auto& consumable = random::element(consumables,generator);
-        slot.price_mult = random::real(0.f,1.f,generator)*(consumable.price_max-consumable.price_min)+consumable.price_min;
+        auto& consumable = rng::element(consumables,generator);
+        slot.price_mult = rng::real(0.f,1.f,generator)*(consumable.price_max-consumable.price_min)+consumable.price_min;
         slot.infinite=false;
-        slot.quantity=static_cast<u8>(random::integer(consumable.min,consumable.max,generator));
+        slot.quantity=static_cast<u8>(rng::integer(consumable.min,consumable.max,generator));
         slot.item_id=consumable.id;
     }
 }
@@ -1569,13 +1569,13 @@ void place_dyna_tillo_items(ItemRandoData& lots,ItemRandoConfig& config){
     //All 4 categories use the same items but different chance
     for(s32 i = 0;i<4;i++){
         s32 items_ids[10];
-        items_ids[0]=random::element(lots.items.consumables,generator).id;
-        items_ids[1]=random::element(lots.items.consumables,generator).id;
-        items_ids[2]=random::element(lots.items.consumables,generator).id;
-        items_ids[3]=random::element(lots.items.consumables,generator).id;
+        items_ids[0]=rng::element(lots.items.consumables,generator).id;
+        items_ids[1]=rng::element(lots.items.consumables,generator).id;
+        items_ids[2]=rng::element(lots.items.consumables,generator).id;
+        items_ids[3]=rng::element(lots.items.consumables,generator).id;
         for(size_t j = 4;j<10;j++){
             if(wars.empty())break;
-            auto ptr = random::element(wars,generator);
+            auto ptr = rng::element(wars,generator);
             items_ids[j] = ptr->id;
             ptr->quantity-=1;
         }
@@ -1585,7 +1585,7 @@ void place_dyna_tillo_items(ItemRandoData& lots,ItemRandoConfig& config){
         for(size_t h =0;h<10;h++){
             lot.item_id=items_ids[h];
             for(s32 j = 0;j<400;j+=100){
-                lot.chance=random::real(0.5f,3.f,generator);
+                lot.chance=rng::real(0.5f,3.f,generator);
                 lot.lot_id=initial_lot_id+i+j;
                 lots.lots.push_back(lot);
             }
@@ -1615,7 +1615,7 @@ void place_items(ItemRandoData& data,ItemRandoConfig& config){
         auto& possible_quantities = items.item_drop_quantity[items.item_drop_index[i]];
         s32 remaining = mitem.quantity;
         while(remaining>0){
-            s32 quantity = random::element(possible_quantities,generator);
+            s32 quantity = rng::element(possible_quantities,generator);
             quantity = std::min(remaining,quantity);
             remaining-=quantity;
             cc.push_back({&mitem,quantity});
@@ -1633,7 +1633,7 @@ void place_items(ItemRandoData& data,ItemRandoConfig& config){
     //@CAUTION NEED TO MAKE SURE THERE ARE ENOUGH ITEMS TO PUT IN EVERY LOT
     auto lots_to_fill = data.missable_lots.size()+data.safe_chr_drop.size();
     while(lots_to_fill>cc.size()){
-        auto& random_item = random::element(items.consumables,generator);
+        auto& random_item = rng::element(items.consumables,generator);
         cc.push_back({&random_item,1});
     }
 
@@ -1704,8 +1704,8 @@ void place_enemy_drops(ItemRandoData& data,ItemRandoConfig& config){
     place_enemy_items(data,enemies,enemy_id_lots,weapons);
     //Place consumables
     for(const auto& id:enemies){
-        if(random::integer(0,99,generator)<40) continue;
-        auto element = random::element(data.items.consumables,generator);        
+        if(rng::integer(0,99,generator)<40) continue;
+        auto element = rng::element(data.items.consumables,generator);        
         LotData lot;
         lot.amount=1;
         lot.infinite=true;
@@ -1739,7 +1739,7 @@ void randomize_weapon_infusion(ItemRandoData& data,ItemRandoConfig& config){
         }
         if(index==SIZE_MAX) return;
         auto& weapon_specs = data.items.gear_specs[index];
-        auto roll = random::integer(0,999,generator);
+        auto roll = rng::integer(0,999,generator);
         if(weapon_specs.max_reinforce_lvl>5){//Weapons that go to +10
                  if(roll>990) lot.reinforcement=4;
             else if(roll>950) lot.reinforcement=3;
@@ -1751,16 +1751,16 @@ void randomize_weapon_infusion(ItemRandoData& data,ItemRandoConfig& config){
             else if(roll>950) lot.reinforcement=2;
             else if(roll>900) lot.reinforcement=1;
         }
-        auto infusion_roll = random::integer(0,99,generator);
+        auto infusion_roll = rng::integer(0,99,generator);
         if(infusion_roll>89){
             switch(weapon_specs.infusion_type){
-                case InfusionType::All:          lot.infusion= random::element(all,generator);break;
-                case InfusionType::NoBleed:      lot.infusion= random::element(no_bleed,generator);break;
-                case InfusionType::Elemental:    lot.infusion= random::element(elemental,generator);break;
-                case InfusionType::DarkMagic:    lot.infusion= random::element(dark_magic,generator);break;
-                case InfusionType::NoElemental:  lot.infusion= random::element(no_elemental,generator);break;
-                case InfusionType::DarkLighting: lot.infusion= random::element(dark_lightin,generator);break;
-                case InfusionType::NoPoisonBleed:lot.infusion= random::element(no_poison_bleed,generator);break;
+                case InfusionType::All:          lot.infusion= rng::element(all,generator);break;
+                case InfusionType::NoBleed:      lot.infusion= rng::element(no_bleed,generator);break;
+                case InfusionType::Elemental:    lot.infusion= rng::element(elemental,generator);break;
+                case InfusionType::DarkMagic:    lot.infusion= rng::element(dark_magic,generator);break;
+                case InfusionType::NoElemental:  lot.infusion= rng::element(no_elemental,generator);break;
+                case InfusionType::DarkLighting: lot.infusion= rng::element(dark_lightin,generator);break;
+                case InfusionType::NoPoisonBleed:lot.infusion= rng::element(no_poison_bleed,generator);break;
                 default: lot.infusion = Infusion::None;
             }
         }
@@ -1798,7 +1798,7 @@ void randomize_classes(ItemRandoData& data,ItemRandoConfig& config){
             if(valid_piece&&str&&dex&&intll&&fth&&w) valid_index.push_back(i);
         }
         if(!valid_index.empty()){
-            auto& piece = gear[random::element(valid_index,generator)];
+            auto& piece = gear[rng::element(valid_index,generator)];
             gear_piece=piece.id;
             specs.weight+=piece.weight;
         }
@@ -1846,17 +1846,17 @@ void randomize_classes(ItemRandoData& data,ItemRandoConfig& config){
 
                     if(config.allow_twohanding) specs.str/=2;
                 }else if(e==Equipment::LHand){
-                    if(random::real(0.f,1.f,generator)>0.5f) continue;//No second weapon for you
+                    if(rng::real(0.f,1.f,generator)>0.5f) continue;//No second weapon for you
                     if(config.allow_catalysts){
                         valid_gear(GearPiece::LeftCat,specs,mclass.gear.left_hand);
                     }else {
                         valid_gear(GearPiece::Left,specs,mclass.gear.left_hand);
                     }
                 }else if(e==Equipment::Spell){
-                    if(random::real(0.f,1.f,generator)>0.5f) continue;//No spell for you
+                    if(rng::real(0.f,1.f,generator)>0.5f) continue;//No spell for you
                     valid_gear(GearPiece::Spell,specs,mclass.gear.spell);
                 }else if(e==Equipment::Ring){
-                    if(random::real(0.f,1.f,generator)>0.5f) continue;//No ring for you
+                    if(rng::real(0.f,1.f,generator)>0.5f) continue;//No ring for you
                     valid_gear(GearPiece::Ring,specs,mclass.gear.ring);
                 }
             }
@@ -1907,7 +1907,7 @@ void randomize_starting_gifts(ItemRandoData& data,ItemRandoConfig& config){
     std::mt19937_64 generator(config.seed);
     data.starting_gifts.resize(7);
     for(auto& entry:data.starting_gifts){
-        auto index = random::vindex(gifts,generator);
+        auto index = rng::vindex(gifts,generator);
         if(index>=gifts.size())continue;
         entry = gifts[index];
         std::swap(gifts[index],gifts.back());

@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 #include <iostream>
+#include <cstdint>
+#include <cstring>
 
 using s8  = int8_t;
 using u8  = uint8_t;
