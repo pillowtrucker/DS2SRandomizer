@@ -40,6 +40,7 @@ namespace randomizer{
         uint32_t enemy_shuffling;
         bool shuffle_enemies;//permute existing enemies (preserves population) instead of randomizing
         bool shuffle_global;//when shuffling: true=across the whole game, false=within each map
+        bool shuffle_bosses;//permute the arena bosses (preserves the boss set) instead of randomizing
         BossBalance boss_balance;
         Multiboss multiboss;
         int  roaming_boss_chance;

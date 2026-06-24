@@ -36,20 +36,28 @@ run it from a directory containing the release's `data/` folder; it reads
 ./ds2rando_cli [seed]
 ```
 
-## Enemy shuffle
+## Shuffle (enemies & bosses)
 
-By default the randomizer *randomizes* enemies: every spawn independently picks
-a random enemy, which distorts the population (many enemies disappear while
-others get duplicated all over). The *shuffle* mode instead permutes the enemies
-that are already placed, so the multiset is preserved — every enemy still
-appears exactly as many times as in the vanilla game, just in different spots.
+By default the randomizer *randomizes*: every spawn independently picks a random
+enemy (and arenas get random bosses), which distorts the population — many
+enemies disappear while others get duplicated all over. The *shuffle* modes
+instead permute what is already placed, so the multiset is preserved: every
+enemy/boss still appears exactly as many times as in the vanilla game, just in
+different spots.
 
 Enable it in `er_config.txt`:
 
 ```
 #SHUFFLE_ENEMIES 1   # 1 = shuffle existing enemies, 0 = original randomize behavior
-#SHUFFLE_GLOBAL 1    # 1 = shuffle across the whole game, 0 = within each map only
+#SHUFFLE_GLOBAL 1    # 1 = shuffle enemies across the whole game, 0 = within each map only
+#SHUFFLE_BOSSES 1    # 1 = shuffle the arena bosses, 0 = original randomize behavior
 ```
 
-Each run prints a short population report so you can confirm the shuffle kept
-the enemy counts identical to the original.
+Boss shuffle permutes the arena bosses while respecting the vanilla size
+constraint (a boss only goes where it fits). A handful of special encounters
+(the Congregation, the Shulva gank trio, the bow half of the Twin Dragonrider)
+are left vanilla because they aren't standard single-boss arenas. Set
+`DS2_BOSS_DEBUG=1` in the environment to log which arenas were skipped and why.
+
+Each run prints a short population report so you can confirm the shuffle kept the
+enemy and boss counts identical to the original.

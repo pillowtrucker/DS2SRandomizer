@@ -1442,13 +1442,108 @@ std::vector<u64> get_random_boss_ids(const BossArena& arena,EnemyTable& enemy_ta
     return replacement_ids;
 }
 
+//Boss shuffle: like the enemy shuffle, but for arena bosses. Instead of dropping
+//random bosses into arenas, this permutes the bosses that already occupy the
+//arenas, so every boss still appears exactly once - just in a different arena.
+//The permutation respects the vanilla size constraint (boss.size <= arena.size),
+//which is always satisfiable because the original placement itself is one valid
+//assignment. Bosses are placed largest-first into a random eligible arena, which
+//guarantees the smaller (less constrained) bosses never starve a bigger one.
+BossHolder generate_boss_shuffle(GameData& map_data,EnemyTable& enemy_table,const Config& config,std::mt19937_64& random_generator){
+    BossHolder holder;
+    auto& bosses = enemy_table.bosses;
+    //Map a boss "type" (enemy_id/100) to its index in the boss table. Arena
+    //generators reference specific variations (e.g. Dragonrider 611510) that may
+    //differ from the variation listed in bosses.txt (611520), but both share the
+    //type 6115, which is how the boss table is keyed.
+    std::unordered_map<s32,size_t> type_to_boss;
+    for(size_t i=0;i<bosses.size();i++)
+        type_to_boss[bosses[i].id]=i;
+
+    struct Slot{size_t arena_index;size_t arena_boss_index;int capacity;};
+    std::vector<Slot> slots;
+    std::vector<size_t> pool;//original boss_table_index for each slot, to be permuted
+    std::vector<BossHolder::BossReplacementData> skipped;
+    for(size_t j=0;j<enemy_table.boss_arenas.size();j++){
+        const auto& arena=enemy_table.boss_arenas[j];
+        if(!get_settings(arena.map_id,config).randomize)continue;
+        auto map_index=get_map(map_data,arena.map_id);
+        for(size_t i=0;i<arena.ids.size();i++){
+            size_t orig=SIZE_MAX;
+            const char* why="ok";
+            if(map_index<map_data.size()){
+                auto* g=get_entry_ptr(map_data[map_index].generator,arena.ids[i]);
+                if(g){
+                    auto* r=find_regist_ptr(map_data[map_index],g->generator_regist_param);
+                    if(r){
+                        auto it=type_to_boss.find(r->enemy_id/100);
+                        if(it!=type_to_boss.end()) orig=it->second; else why="enemy_id not a boss";
+                    }else why="no regist";
+                }else why="no generator row";
+            }else why="map not loaded";
+            if(getenv("DS2_BOSS_DEBUG")&&orig==SIZE_MAX)
+                std::cout<<"  [boss-skip] arena='"<<arena.name<<"' map="<<arena.map_id<<" gen="<<arena.ids[i]<<" : "<<why<<"\n";
+            BossHolder::BossReplacementData rd;
+            rd.arena_index=j; rd.arena_boss_index=i; rd.boss_table_index=0;
+            if(orig==SIZE_MAX||vector_contains(config.banned_enemies,(size_t)bosses[orig].id)){
+                rd.skip=true;//couldn't identify the original boss, leave the arena vanilla
+                skipped.push_back(rd);
+            }else{
+                slots.push_back({j,i,arena.size});
+                pool.push_back(orig);
+            }
+        }
+    }
+
+    //Permute pool over slots, largest boss first into a random eligible arena.
+    std::vector<size_t> order(pool.size());
+    std::iota(order.begin(),order.end(),(size_t)0);
+    std::sort(order.begin(),order.end(),[&](size_t a,size_t b){
+        return bosses[pool[a]].size>bosses[pool[b]].size;
+    });
+    std::vector<bool> filled(slots.size(),false);
+    std::vector<size_t> assign(slots.size(),SIZE_MAX);
+    for(size_t oi:order){
+        size_t boss_index=pool[oi];
+        int bsize=bosses[boss_index].size;
+        std::vector<size_t> eligible;
+        for(size_t s=0;s<slots.size();s++)
+            if(!filled[s]&&slots[s].capacity>=bsize) eligible.push_back(s);
+        if(eligible.empty())//shouldn't happen, but never lose a boss
+            for(size_t s=0;s<slots.size();s++) if(!filled[s]) eligible.push_back(s);
+        size_t chosen=eligible[rng::vindex(eligible,random_generator)];
+        assign[chosen]=boss_index;
+        filled[chosen]=true;
+    }
+    for(size_t s=0;s<slots.size();s++){
+        BossHolder::BossReplacementData rd;
+        rd.arena_index=slots[s].arena_index;
+        rd.arena_boss_index=slots[s].arena_boss_index;
+        rd.boss_table_index=assign[s];
+        rd.skip=false;
+        holder.rando_data.push_back(rd);
+    }
+    for(auto& rd:skipped) holder.rando_data.push_back(rd);
+    std::map<size_t,int> orig_hist,placed_hist;
+    for(size_t x:pool) orig_hist[x]++;
+    for(size_t a:assign) if(a!=SIZE_MAX) placed_hist[a]++;
+    std::cout<<"Boss shuffle: "<<slots.size()<<" bosses redistributed across arenas";
+    if(!skipped.empty()) std::cout<<" ("<<skipped.size()<<" arenas left vanilla - original boss not identified)";
+    std::cout<<"\n";
+    std::cout<<"Boss population identical to the original (every boss still appears once): "
+             <<((orig_hist==placed_hist)?"YES":"NO")<<"\n";
+    return holder;
+}
+
 void randomize_bosses(GameData& map_data,EnemyTable& enemy_table,const Config& config){
     std::stringstream log;
     common::boss_log.clear();
     u64 regist_start_row = 1200000000u;
     std::vector<EnemyType>& bosses=enemy_table.bosses;
     std::mt19937_64 random_generator(config.seed);
-    BossHolder holder = generate_boss_deck(enemy_table,config,random_generator);
+    BossHolder holder = config.shuffle_bosses
+        ? generate_boss_shuffle(map_data,enemy_table,config,random_generator)
+        : generate_boss_deck(enemy_table,config,random_generator);
     if(holder.skip_all){
         std::cout<<"SKIPPING BOSS RANDOMIZATION\n";
         return;
@@ -1767,6 +1862,7 @@ std::string generate_config_file(Config& config){
     ss<<"#SHUFFLE_TYPE "<<config.enemy_shuffling<<'\n';
     ss<<"#SHUFFLE_ENEMIES "<<config.shuffle_enemies<<'\n';
     ss<<"#SHUFFLE_GLOBAL "<<config.shuffle_global<<'\n';
+    ss<<"#SHUFFLE_BOSSES "<<config.shuffle_bosses<<'\n';
     ss<<"#CHEATSHEET "<<config.write_cheatsheet<<'\n';
 
     ss<<"#ENEMY_RANDO "<<config.randomize_enemies<<"\n";
@@ -1835,6 +1931,7 @@ bool read_configfile(Config& config){
     config.enemy_shuffling=1;
     config.shuffle_enemies=false;
     config.shuffle_global=true;
+    config.shuffle_bosses=false;
     config.randomize_bosses=true;
     
 
@@ -1929,6 +2026,7 @@ bool read_configfile(Config& config){
         else if(command=="#INVIS_ENEMY")config.remove_invis=value1;
         else if(command=="#SHUFFLE_ENEMIES")config.shuffle_enemies=value1;
         else if(command=="#SHUFFLE_GLOBAL")config.shuffle_global=value1;
+        else if(command=="#SHUFFLE_BOSSES")config.shuffle_bosses=value1;
         else if(command=="#ROAMING_BOSS")config.roaming_boss=value1;
         else if(command=="#ROAMING_CHANCE")config.roaming_boss_chance=(int)value1;
         else if(command=="#ROAMING_RESPAWN")config.respawn_roaming_boss=value1;
