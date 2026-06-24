@@ -54,10 +54,14 @@ Enable it in `er_config.txt`:
 ```
 
 Boss shuffle permutes the arena bosses while respecting the vanilla size
-constraint (a boss only goes where it fits). A handful of special encounters
-(the Congregation, the Shulva gank trio, the bow half of the Twin Dragonrider)
-are left vanilla because they aren't standard single-boss arenas. Set
-`DS2_BOSS_DEBUG=1` in the environment to log which arenas were skipped and why.
+constraint (a boss only goes where it fits). A handful of arenas can't take part
+in a population-preserving permutation — special multi-entity/gimmick encounters
+that aren't standard single bosses (the Congregation, the Shulva gank trio, the
+bow half of the Twin Dragonrider) and bosses excluded by `#BANNED` (e.g. the
+Ancient Dragon, which is too big for any arena anyway). Those arenas fall back to
+the original randomizer behaviour: they receive a random boss rather than keeping
+their vanilla one. Set `DS2_BOSS_DEBUG=1` in the environment to log which arenas
+were randomized and why.
 
 Each run prints a short population report so you can confirm the shuffle kept the
 enemy and boss counts identical to the original.

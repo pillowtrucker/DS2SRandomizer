@@ -1460,10 +1460,28 @@ BossHolder generate_boss_shuffle(GameData& map_data,EnemyTable& enemy_table,cons
     for(size_t i=0;i<bosses.size();i++)
         type_to_boss[bosses[i].id]=i;
 
+    //Bosses available as random replacements, grouped by size, for arenas that
+    //can't take part in the shuffle. Mirrors generate_boss_deck: a huge arena can
+    //take any boss, a big arena big-or-smaller, a mid arena only mid-or-smaller.
+    std::vector<size_t> mid_index,big_index,huge_index;
+    for(size_t i=0;i<bosses.size();i++){
+        if(vector_contains(config.banned_enemies,(size_t)bosses[i].id)) continue;
+        if(bosses[i].size>=3)      huge_index.push_back(i);
+        else if(bosses[i].size==2) big_index.push_back(i);
+        else                       mid_index.push_back(i);
+    }
+    big_index.insert(big_index.end(),mid_index.begin(),mid_index.end());
+    huge_index.insert(huge_index.end(),big_index.begin(),big_index.end());
+    auto deck_for=[&](int sz)->std::vector<size_t>*{
+        if(sz>=3) return &huge_index;
+        if(sz==2) return &big_index;
+        return &mid_index;
+    };
+
     struct Slot{size_t arena_index;size_t arena_boss_index;int capacity;};
     std::vector<Slot> slots;
-    std::vector<size_t> pool;//original boss_table_index for each slot, to be permuted
-    std::vector<BossHolder::BossReplacementData> skipped;
+    std::vector<size_t> pool;//original boss_table_index for each shuffleable slot, to be permuted
+    std::vector<BossHolder::BossReplacementData> randomized;//special/banned arenas get a random boss
     for(size_t j=0;j<enemy_table.boss_arenas.size();j++){
         const auto& arena=enemy_table.boss_arenas[j];
         if(!get_settings(arena.map_id,config).randomize)continue;
@@ -1481,16 +1499,27 @@ BossHolder generate_boss_shuffle(GameData& map_data,EnemyTable& enemy_table,cons
                     }else why="no regist";
                 }else why="no generator row";
             }else why="map not loaded";
-            if(getenv("DS2_BOSS_DEBUG")&&orig==SIZE_MAX)
-                std::cout<<"  [boss-skip] arena='"<<arena.name<<"' map="<<arena.map_id<<" gen="<<arena.ids[i]<<" : "<<why<<"\n";
-            BossHolder::BossReplacementData rd;
-            rd.arena_index=j; rd.arena_boss_index=i; rd.boss_table_index=0;
-            if(orig==SIZE_MAX||vector_contains(config.banned_enemies,(size_t)bosses[orig].id)){
-                rd.skip=true;//couldn't identify the original boss, leave the arena vanilla
-                skipped.push_back(rd);
-            }else{
+            bool banned=(orig!=SIZE_MAX)&&vector_contains(config.banned_enemies,(size_t)bosses[orig].id);
+            bool shuffleable=(orig!=SIZE_MAX)&&!banned;
+            if(getenv("DS2_BOSS_DEBUG")&&!shuffleable)
+                std::cout<<"  [boss-randomized] arena='"<<arena.name<<"' map="<<arena.map_id<<" gen="<<arena.ids[i]
+                         <<" : "<<(banned?("banned original boss="+bosses[orig].name):std::string(why))<<"\n";
+            if(shuffleable){
                 slots.push_back({j,i,arena.size});
                 pool.push_back(orig);
+            }else{
+                //Special/gimmick encounter (not a roster boss) or a banned boss:
+                //fall back to the original randomizer and drop a random boss here.
+                BossHolder::BossReplacementData rd;
+                rd.arena_index=j; rd.arena_boss_index=i; rd.boss_table_index=0;
+                auto* deck=deck_for(arena.size);
+                if(deck->empty()){
+                    rd.skip=true;
+                }else{
+                    rd.skip=false;
+                    rd.boss_table_index=rng::element(*deck,random_generator);
+                }
+                randomized.push_back(rd);
             }
         }
     }
@@ -1523,14 +1552,14 @@ BossHolder generate_boss_shuffle(GameData& map_data,EnemyTable& enemy_table,cons
         rd.skip=false;
         holder.rando_data.push_back(rd);
     }
-    for(auto& rd:skipped) holder.rando_data.push_back(rd);
+    for(auto& rd:randomized) holder.rando_data.push_back(rd);
     std::map<size_t,int> orig_hist,placed_hist;
     for(size_t x:pool) orig_hist[x]++;
     for(size_t a:assign) if(a!=SIZE_MAX) placed_hist[a]++;
-    std::cout<<"Boss shuffle: "<<slots.size()<<" bosses redistributed across arenas";
-    if(!skipped.empty()) std::cout<<" ("<<skipped.size()<<" arenas left vanilla - original boss not identified)";
+    std::cout<<"Boss shuffle: "<<slots.size()<<" bosses redistributed";
+    if(!randomized.empty()) std::cout<<"; "<<randomized.size()<<" special/banned arenas randomized";
     std::cout<<"\n";
-    std::cout<<"Boss population identical to the original (every boss still appears once): "
+    std::cout<<"Shuffled-boss population identical to the original: "
              <<((orig_hist==placed_hist)?"YES":"NO")<<"\n";
     return holder;
 }
